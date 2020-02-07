@@ -1,0 +1,113 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "vmCount": {
+      "type": "int",
+      "minValue": 1
+    },
+    "storType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_ZRS",
+        "Standard_GRS",
+        "Standard_RAGRS",
+        "Premium_LRS"
+      ]
+    },
+    "vmAdminPassword": {
+      "type": "securestring"
+    },
+    "_artifactsLocation": {
+      "type": "string"
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring"
+    }
+  },
+  "variables": {
+    "vmTemplateFolder": "nestedtemplates",
+    "vmTemplateFileName": "vm.json",
+    "vmTemplateParametersFileName": "vm.parameters.json",
+    "vnetName": "lm-cpvm-vnet",
+    "vnetPrefix": "10.0.0.0/16",
+    "vnetSubnet1Name": "default",
+    "vnetSubnet1Prefix": "10.0.0.0/24",
+    "storName": "[concat('lmcpvmstor', uniqueString(resourceGroup().id))]"
+  },
+  "resources": [
+    {
+      "name": "[variables('vnetName')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "Virtual Network"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('vnetPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('vnetSubnet1Name')]",
+            "properties": {
+              "addressPrefix": "[variables('vnetSubnet1Prefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('storName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-01-01",
+      "sku": {
+        "name": "[parameters('storType')]"
+      },
+      "dependsOn": [],
+      "tags": {
+        "displayName": "Storage Account"
+      },
+      "kind": "Storage"
+    },
+    {
+      "name": "[concat('vm-deployment-', copyIndex(1))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-08-01",
+      "dependsOn": [
+        "[variables('vnetName')]",
+        "[variables('storName')]"
+      ],
+      "tags": {
+        "displayName": "VM Deployment"
+      },
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('_artifactsLocation'), '/', variables('vmTemplateFolder'), '/', variables('vmTemplateFileName'), parameters('_artifactsLocationSasToken'))]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "vmIndex": { "value": "[copyIndex(1)]" },
+          "vnetId": { "value": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]" },
+          "subnetName": { "value": "[variables('vnetSubnet1Name')]" },
+          "storId": { "value": "[resourceId('Microsoft.Storage/storageAccounts', variables('storName'))]" },
+          "vmAdminUserName": { "value": "liammoat" },
+          "vmAdminPassword": { "value": "[parameters('vmAdminPassword')]" }
+        }
+      },
+      "copy": {
+        "name": "vmcopy",
+        "count": "[parameters('vmCount')]"
+      }
+    }
+  ],
+  "outputs": {}
+}
